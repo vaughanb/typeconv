@@ -1,3 +1,23 @@
+# Binaries and build artifacts
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Coverage
+coverage.out
+coverage.html
+
+# Editor/OS
+.DS_Store
+.idea/
+.vscode/
+
+# Go workspace files
+go.work
+go.work.sum
+
 # If you prefer the allow list template instead of the deny list, see community template:
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
