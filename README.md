@@ -148,19 +148,6 @@ BenchmarkCompareTypeconvVsJSON/Copier-8      ~6583 ns/op   ~5792 B/op     ~61 al
 BenchmarkCompareTypeconvVsJSON/Mapstructure-8 ~6241 ns/op  ~5336 B/op     ~97 allocs/op
 ```
 
-Notes:
-- Typeconv is this package’s planned converter.
-- JSON is a marshal/unmarshal round-trip.
-- Copier refers to `github.com/jinzhu/copier` with a matching `TypeConverter`.
-- Mapstructure refers to `github.com/go-viper/mapstructure` with a decode hook. See: [mapstructure README](https://github.com/go-viper/mapstructure)
-
-### How it compares (plain terms)
-
-- Typeconv: purpose-built for struct-to-struct mapping by tags/names. On the sample above it’s roughly 2x faster than JSON and around 4–5x faster than Copier/Mapstructure, with far fewer allocations. It also supports per-call custom converters without global state and handles nested structs/slices/maps.
-- JSON: simple and dependable, but slower and alloc-heavy due to serialization. Useful when types differ significantly or you want strict JSON semantics everywhere.
-- Copier: flexible, feature-rich copier with deep copy, field name heuristics, and converters. It is convenient, but typically slower and allocates more than Typeconv for tag-driven struct mapping workloads.
-- Mapstructure: highly flexible decoder for `map[string]any` → struct with decode hooks. Great for dynamic inputs, but for struct→struct mappings it tends to be slower and allocate more than Typeconv.
-
 ### Example matrix
 
 ```go
