@@ -18,7 +18,7 @@ func ExampleConvert() {
 	s := exampleSrc{Name: "Alice"}
 	var d exampleDst
 
-	_ = tc.Convert(&d, &s)
+	_ = tc.Convert(&s, &d)
 	fmt.Println(d.Name)
 	// Output: Alice
 }

@@ -32,10 +32,8 @@ type convKey struct {
 type localConverterRegistry map[convKey]leafConv
 
 // Convert copies data from src to dst using a cached plan inferred from JSON tags.
-// Optional custom converters can be provided as variadic functions of the form:
-//
-//	func(dst *D, src *S) error
-func Convert[S any, D any](dst *D, src *S, customConverters ...any) error {
+// Argument order: src, dst, [customConverters].
+func Convert[S any, D any](src *S, dst *D, customConverters ...any) error {
 	p, err := BuildPlan[S, D](defaultOptions)
 	if err != nil {
 		return err
@@ -48,7 +46,6 @@ func Convert[S any, D any](dst *D, src *S, customConverters ...any) error {
 }
 
 // buildLocalRegistry validates and adapts user-provided converter functions into leaf converters.
-// Supported form: func(dst *Dst, src *Src) error
 func buildLocalRegistry(custom []any) (localConverterRegistry, error) {
 	reg := make(localConverterRegistry)
 	for _, c := range custom {
@@ -58,22 +55,20 @@ func buildLocalRegistry(custom []any) (localConverterRegistry, error) {
 		}
 		rt := rv.Type()
 		if rt.NumIn() != 2 || rt.In(0).Kind() != reflect.Pointer || rt.In(1).Kind() != reflect.Pointer {
-			return nil, fmt.Errorf("converter must be func(*Dst, *Src) error, got %s", rt.String())
+			return nil, fmt.Errorf("converter must be func(*Src, *Dst) error, got %s", rt.String())
 		}
 		if rt.NumOut() != 1 || !rt.Out(0).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
 			return nil, fmt.Errorf("converter must return error, got %s", rt.String())
 		}
-		dstPtr := rt.In(0)
-		srcPtr := rt.In(1)
-		dst := dstPtr.Elem()
+		srcPtr := rt.In(0)
+		dstPtr := rt.In(1)
 		src := srcPtr.Elem()
+		dst := dstPtr.Elem()
 		key := convKey{src: src, dst: dst}
 		if _, exists := reg[key]; exists {
 			return nil, fmt.Errorf("duplicate converter for %s -> %s", src.String(), dst.String())
 		}
-		// Adapt to leafConv using reflection call
 		reg[key] = func(dstV, srcV reflect.Value) error {
-			// Ensure addressability at pointer level expected by user func
 			for srcV.Kind() == reflect.Pointer {
 				if srcV.IsNil() {
 					dstV.SetZero()
@@ -87,8 +82,7 @@ func buildLocalRegistry(custom []any) (localConverterRegistry, error) {
 				}
 				dstV = dstV.Elem()
 			}
-			// Call user function: func(*Dst, *Src) error
-			args := []reflect.Value{dstV.Addr(), srcV.Addr()}
+			args := []reflect.Value{srcV.Addr(), dstV.Addr()}
 			out := rv.Call(args)
 			if e := out[0].Interface(); e != nil {
 				return e.(error)
@@ -198,7 +192,6 @@ func (p *Plan[S, D]) convertWithRegistry(dst *D, src *S, reg localConverterRegis
 }
 
 // ---------------- Field discovery ----------------
-
 func buildFieldMap(t reflect.Type, tag string) map[string][]int {
 	m := map[string][]int{}
 	seen := map[string]bool{}
@@ -277,7 +270,6 @@ func isStructLike(t reflect.Type) bool {
 }
 
 // ---------------- Converters ----------------
-
 func makeLeafConv(st, dt reflect.Type, opts Options, reg localConverterRegistry) (leafConv, error) {
 	// 1. Direct types
 	if dt == st || dt.AssignableTo(st) || st.AssignableTo(dt) {
@@ -449,7 +441,6 @@ func jsonFallbackConv(st, dt reflect.Type) (leafConv, error) {
 }
 
 // ---------------- Dynamic plan ----------------
-
 type dynamicPlan struct {
 	steps []step
 	opts  Options
@@ -484,24 +475,3 @@ func (p *dynamicPlan) run(dst, src reflect.Value, reg localConverterRegistry) er
 	}
 	return nil
 }
-
-// ---------------- Caching ----------------
-
-type pair struct {
-	st, dt reflect.Type
-	strict bool
-	tag    string
-}
-
-var planCache sync.Map // map[pair]*Plan[_,_]
-
-func loadPlan[S any, D any](k pair) *Plan[S, D] {
-	if v, ok := planCache.Load(k); ok {
-		if p, ok2 := v.(*Plan[S, D]); ok2 {
-			return p
-		}
-	}
-	return nil
-}
-
-func savePlan[S any, D any](k pair, p *Plan[S, D]) { planCache.Store(k, p) }

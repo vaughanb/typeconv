@@ -15,7 +15,7 @@ Fast, reflection-planned conversions between Go types that share the same field 
 ### Install
 
 ```bash
-go get gitlab.com/quanata/projects/backend/go-util/typeconv
+go get github.com/vaughanb/typeconv
 ```
 
 ### Quick start
@@ -25,7 +25,7 @@ package main
 
 import (
     "fmt"
-    tc "gitlab.com/quanata/projects/backend/go-util/typeconv"
+    tc "github.com/vaughanb/typeconv"
 )
 
 type A struct {
@@ -41,7 +41,7 @@ type B struct {
 func main() {
     a := A{ID: "123", Name: "hello"}
     var b B
-    if err := tc.Convert(&b, &a); err != nil {
+    if err := tc.Convert(&a, &b); err != nil {
         panic(err)
     }
     fmt.Println(b)
@@ -50,13 +50,13 @@ func main() {
 
 ### Per-call custom converters
 
-Register converters per call using `Convert`’s variadic argument. Converters must be `func(dst *D, src *S) error`. They are applied to all nested occurrences of the matching types.
+Register converters per call using `Convert`’s variadic argument. Converters must be `func(src *S, dst *D) error`. They are applied to all nested occurrences of the matching types.
 
 ```go
 type MyString string
 type MyInt int
 
-conv := func(dst *MyInt, src *MyString) error {
+conv := func(src *MyString, dst *MyInt) error {
     // example: parse decimal string to int
     var n int
     _, err := fmt.Sscanf(string(*src), "%d", &n)
@@ -72,7 +72,7 @@ type D struct { N MyInt    `json:"n"` }
 
 s := S{N: MyString("42")}
 var d D
-if err := tc.Convert(&d, &s, conv); err != nil {
+if err := tc.Convert(&s, &d, conv); err != nil {
     panic(err)
 }
 ```

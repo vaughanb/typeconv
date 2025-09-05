@@ -73,7 +73,7 @@ func (d *ExternalDate) UnmarshalJSON(b []byte) error {
 func TestConvertBasic(t *testing.T) {
 	a := A{ID: "123", Name: "hello", Meta: map[string]int{"x": 1}, Items: []ItemA{{Value: 5}}}
 	var b B
-	require.NoError(t, Convert(&b, &a), "Convert failed")
+	require.NoError(t, Convert(&a, &b), "Convert failed")
 	assert.Equal(t, "123", b.ID)
 	assert.Equal(t, "hello", b.Name)
 	assert.Len(t, b.Items, 1)
@@ -91,7 +91,7 @@ func TestJSONFallback(t *testing.T) {
 	s := Src{Date: InternalDate{2025, 9, 3}}
 	var d Dst
 
-	require.NoError(t, Convert(&d, &s), "fallback failed")
+	require.NoError(t, Convert(&s, &d), "fallback failed")
 	assert.NotEmpty(t, d.Date.Raw, "expected non-empty date")
 }
 
@@ -100,7 +100,7 @@ func TestCustomConverter(t *testing.T) {
 	type MyInt int
 
 	// Provide a custom converter from MyString to MyInt per call
-	conv := func(dst *MyInt, src *MyString) error {
+	conv := func(src *MyString, dst *MyInt) error {
 		v, err := strconv.Atoi(string(*src))
 		if err != nil {
 			return err
@@ -118,7 +118,7 @@ func TestCustomConverter(t *testing.T) {
 
 	s := Src{N: MyString("42")}
 	var d Dst
-	require.NoError(t, Convert(&d, &s, conv), "Convert failed")
+	require.NoError(t, Convert(&s, &d, conv), "Convert failed")
 	assert.Equal(t, 42, int(d.N))
 }
 
@@ -164,7 +164,7 @@ func TestCaseInsensitiveTags(t *testing.T) {
 
 	s := S{Name: "X"}
 	var d D
-	require.NoError(t, Convert(&d, &s), "Convert failed")
+	require.NoError(t, Convert(&s, &d), "Convert failed")
 	assert.Equal(t, "X", d.Name)
 }
 
@@ -186,7 +186,7 @@ func TestPointerHandling(t *testing.T) {
 
 		s := S{P: nil}
 		var d D
-		require.NoError(t, Convert(&d, &s))
+		require.NoError(t, Convert(&s, &d))
 		assert.Nil(t, d.P)
 	}
 
@@ -207,7 +207,7 @@ func TestPointerHandling(t *testing.T) {
 
 		s := S{P: &InnerA{V: 21}}
 		var d D
-		require.NoError(t, Convert(&d, &s), "Convert failed")
+		require.NoError(t, Convert(&s, &d), "Convert failed")
 		if assert.NotNil(t, d.P) {
 			assert.Equal(t, 21, d.P.V)
 		}
@@ -230,7 +230,7 @@ func TestSliceConversionPointers(t *testing.T) {
 
 	s := S{Items: []*IA{{V: 1}, {V: 2}}}
 	var d D
-	require.NoError(t, Convert(&d, &s), "Convert failed")
+	require.NoError(t, Convert(&s, &d), "Convert failed")
 	assert.Len(t, d.Items, 2)
 	assert.Equal(t, 1, d.Items[0].V)
 	assert.Equal(t, 2, d.Items[1].V)
@@ -253,14 +253,14 @@ func TestMapConversionNested(t *testing.T) {
 	// Non-nil map
 	s := S{M: map[string]IA{"a": {V: 7}}}
 	var d D
-	require.NoError(t, Convert(&d, &s), "Convert failed")
+	require.NoError(t, Convert(&s, &d), "Convert failed")
 	assert.Len(t, d.M, 1)
 	assert.Equal(t, 7, d.M["a"].V)
 
 	// Nil map -> zero value at destination
 	s2 := S{M: nil}
 	var d2 D
-	require.NoError(t, Convert(&d2, &s2), "Convert failed")
+	require.NoError(t, Convert(&s2, &d2), "Convert failed")
 	assert.Nil(t, d2.M)
 }
 
@@ -281,7 +281,7 @@ func TestJSONFallbackNestedStruct(t *testing.T) {
 
 	s := S{X: SA{Date: InternalDate{2024, 12, 31}}}
 	var d D
-	require.NoError(t, Convert(&d, &s), "Convert failed")
+	require.NoError(t, Convert(&s, &d), "Convert failed")
 	assert.NotEmpty(t, d.X.Date.Raw)
 }
 
@@ -293,7 +293,7 @@ func TestCustomConverterPrecedence(t *testing.T) {
 		V int `json:"v"`
 	}
 
-	conv := func(dst *Beta, src *Alpha) error {
+	conv := func(src *Alpha, dst *Beta) error {
 		dst.V = 99
 		return nil
 	}
@@ -307,7 +307,7 @@ func TestCustomConverterPrecedence(t *testing.T) {
 
 	s := S{X: Alpha{V: 1}}
 	var d D
-	require.NoError(t, Convert(&d, &s, conv), "Convert failed")
+	require.NoError(t, Convert(&s, &d, conv), "Convert failed")
 	assert.Equal(t, 99, d.X.V)
 }
 
@@ -338,7 +338,7 @@ func TestUntaggedFieldNameMatching(t *testing.T) {
 
 	s := S{Name: "foo", Count: 42}
 	var d D
-	require.NoError(t, Convert(&d, &s), "Convert failed")
+	require.NoError(t, Convert(&s, &d), "Convert failed")
 	assert.Equal(t, "foo", d.NAME)
 	assert.Equal(t, 42, d.Count)
 }
@@ -347,105 +347,105 @@ func TestUntaggedFieldNameMatching(t *testing.T) {
 // for converting between two structs with similar fields.
 //
 // Requires:
-//   go get github.com/jinzhu/copier
-//   go get github.com/go-viper/mapstructure/v2
 //
-//func BenchmarkCompareTypeconvVsJSON(b *testing.B) {
-//	// Per-call custom converter for CustomTypeA -> CustomTypeB
-//	cconv := func(dst *CustomTypeB, src *CustomTypeA) error {
-//		v, err := strconv.Atoi(string(*src))
-//		if err != nil {
-//			return err
-//		}
-//		*dst = CustomTypeB(v)
-//		return nil
-//	}
-//
-//	a := A{
-//		ID:       "bench",
-//		Name:     "world",
-//		Meta:     map[string]int{"x": 42},
-//		Items:    []ItemA{{Value: 5}, {Value: 6}},
-//		Untagged: "untagged-value",
-//		Custom:   CustomTypeA("1234"),
-//	}
-//	var bb B
-//
-//	b.Run("Typeconv", func(b *testing.B) {
-//		b.ReportAllocs()
-//		for i := 0; i < b.N; i++ {
-//			if err := Convert(&bb, &a, cconv); err != nil {
-//				b.Fatal(err)
-//			}
-//		}
-//	})
-//
-//	b.Run("JSON", func(b *testing.B) {
-//		b.ReportAllocs()
-//		for i := 0; i < b.N; i++ {
-//			data, _ := json.Marshal(a)
-//			var out B
-//			if err := json.Unmarshal(data, &out); err != nil {
-//				b.Fatal(err)
-//			}
-//		}
-//	})
-//
-//	// Benchmark using github.com/jinzhu/copier
-//	b.Run("Copier", func(b *testing.B) {
-//		b.ReportAllocs()
-//		opt := copier.Option{
-//			DeepCopy: true,
-//			Converters: []copier.TypeConverter{
-//				{
-//					SrcType: reflect.TypeOf(CustomTypeA("")),
-//					DstType: reflect.TypeOf(CustomTypeB(0)),
-//					Fn: func(src interface{}) (interface{}, error) {
-//						s := src.(CustomTypeA)
-//						v, err := strconv.Atoi(string(s))
-//						if err != nil {
-//							return nil, err
-//						}
-//						return CustomTypeB(v), nil
-//					},
-//				},
-//			},
-//		}
-//		for i := 0; i < b.N; i++ {
-//			var out B
-//			if err := copier.CopyWithOption(&out, &a, opt); err != nil {
-//				b.Fatal(err)
-//			}
-//		}
-//	})
-//
-//	// Benchmark using github.com/go-viper/mapstructure/v2
-//	b.Run("Mapstructure", func(b *testing.B) {
-//		b.ReportAllocs()
-//		for i := 0; i < b.N; i++ {
-//			var out B
-//			cfg := &mapstructure.DecoderConfig{
-//				TagName: "json",
-//				Result:  &out,
-//				DecodeHook: func(from reflect.Type, to reflect.Type, data interface{}) (interface{}, error) {
-//					if from == reflect.TypeOf(CustomTypeA("")) && to == reflect.TypeOf(CustomTypeB(0)) {
-//						s := data.(CustomTypeA)
-//						v, err := strconv.Atoi(string(s))
-//						if err != nil {
-//							return nil, err
-//						}
-//						return CustomTypeB(v), nil
-//					}
-//					return data, nil
-//				},
-//			}
-//			dec, err := mapstructure.NewDecoder(cfg)
-//			if err != nil {
-//				b.Fatal(err)
-//			}
-//			if err := dec.Decode(a); err != nil {
-//				b.Fatal(err)
-//			}
-//		}
-//	})
-//}
+//	go get github.com/jinzhu/copier
+//	go get github.com/go-viper/mapstructure/v2
+// func BenchmarkCompareTypeconvVsJSON(b *testing.B) {
+// 	// Per-call custom converter for CustomTypeA -> CustomTypeB (src-first)
+// 	cconv := func(src *CustomTypeA, dst *CustomTypeB) error {
+// 		v, err := strconv.Atoi(string(*src))
+// 		if err != nil {
+// 			return err
+// 		}
+// 		*dst = CustomTypeB(v)
+// 		return nil
+// 	}
+
+// 	a := A{
+// 		ID:       "bench",
+// 		Name:     "world",
+// 		Meta:     map[string]int{"x": 42},
+// 		Items:    []ItemA{{Value: 5}, {Value: 6}},
+// 		Untagged: "untagged-value",
+// 		Custom:   CustomTypeA("1234"),
+// 	}
+// 	var bb B
+
+// 	b.Run("Typeconv", func(b *testing.B) {
+// 		b.ReportAllocs()
+// 		for i := 0; i < b.N; i++ {
+// 			if err := Convert(&a, &bb, cconv); err != nil {
+// 				b.Fatal(err)
+// 			}
+// 		}
+// 	})
+
+// 	b.Run("JSON", func(b *testing.B) {
+// 		b.ReportAllocs()
+// 		for i := 0; i < b.N; i++ {
+// 			data, _ := json.Marshal(a)
+// 			var out B
+// 			if err := json.Unmarshal(data, &out); err != nil {
+// 				b.Fatal(err)
+// 			}
+// 		}
+// 	})
+
+// 	// Benchmark using github.com/jinzhu/copier
+// 	b.Run("Copier", func(b *testing.B) {
+// 		b.ReportAllocs()
+// 		opt := copier.Option{
+// 			DeepCopy: true,
+// 			Converters: []copier.TypeConverter{
+// 				{
+// 					SrcType: reflect.TypeOf(CustomTypeA("")),
+// 					DstType: reflect.TypeOf(CustomTypeB(0)),
+// 					Fn: func(src interface{}) (interface{}, error) {
+// 						s := src.(CustomTypeA)
+// 						v, err := strconv.Atoi(string(s))
+// 						if err != nil {
+// 							return nil, err
+// 						}
+// 						return CustomTypeB(v), nil
+// 					},
+// 				},
+// 			},
+// 		}
+// 		for i := 0; i < b.N; i++ {
+// 			var out B
+// 			if err := copier.CopyWithOption(&out, &a, opt); err != nil {
+// 				b.Fatal(err)
+// 			}
+// 		}
+// 	})
+
+// 	// Benchmark using github.com/go-viper/mapstructure/v2
+// 	b.Run("Mapstructure", func(b *testing.B) {
+// 		b.ReportAllocs()
+// 		for i := 0; i < b.N; i++ {
+// 			var out B
+// 			cfg := &mapstructure.DecoderConfig{
+// 				TagName: "json",
+// 				Result:  &out,
+// 				DecodeHook: func(from reflect.Type, to reflect.Type, data interface{}) (interface{}, error) {
+// 					if from == reflect.TypeOf(CustomTypeA("")) && to == reflect.TypeOf(CustomTypeB(0)) {
+// 						s := data.(CustomTypeA)
+// 						v, err := strconv.Atoi(string(s))
+// 						if err != nil {
+// 							return nil, err
+// 						}
+// 						return CustomTypeB(v), nil
+// 					}
+// 					return data, nil
+// 				},
+// 			}
+// 			dec, err := mapstructure.NewDecoder(cfg)
+// 			if err != nil {
+// 				b.Fatal(err)
+// 			}
+// 			if err := dec.Decode(a); err != nil {
+// 				b.Fatal(err)
+// 			}
+// 		}
+// 	})
+// }
